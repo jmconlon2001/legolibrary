@@ -59,15 +59,14 @@ using (var scope = app.Services.CreateScope())
     db.Database.Migrate();
 }
 
-// Configure the HTTP request pipeline.
+// This app is designed to be served over plain HTTP (Docker exposes :8080 directly; put a
+// reverse proxy in front for TLS termination if exposing it beyond a home network) — no
+// UseHsts/UseHttpsRedirection, since neither has an HTTPS endpoint to redirect to here.
 if (!app.Environment.IsDevelopment())
 {
     app.UseExceptionHandler("/Error", createScopeForErrors: true);
-    // The default HSTS value is 30 days. You may want to change this for production scenarios, see https://aka.ms/aspnetcore-hsts.
-    app.UseHsts();
 }
 app.UseStatusCodePagesWithReExecute("/not-found", createScopeForStatusCodePages: true);
-app.UseHttpsRedirection();
 
 var mediaRootPath = Path.GetFullPath(app.Configuration.GetSection(MediaStorageOptions.SectionName)["RootPath"] ?? "media");
 Directory.CreateDirectory(mediaRootPath);
