@@ -1,7 +1,11 @@
 bin/
 obj/
-data/
-media/
+# Anchored and exact-case: these must never match the source folders
+# src/LegoTracker/Data/ or src/LegoTracker/Services/Media/. This repo previously
+# had core.ignorecase=true (macOS default), which made an unanchored `data/`/`media/`
+# pattern here silently swallow those two source folders from every commit.
+/src/LegoTracker/data/
+/src/LegoTracker/media/
 *.db
 *.db-shm
 *.db-wal
