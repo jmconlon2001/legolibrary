@@ -1,0 +1,125 @@
+@page "/import"
+@using LegoTracker.Data.Enums
+@using LegoTracker.Services.Import
+@using LegoTracker.Services.Notifications
+@implements IDisposable
+@inject ImportJobQueue ImportQueue
+@inject INotificationService Notifications
+
+<PageTitle>Bulk Import</PageTitle>
+
+<MudText Typo="Typo.h4" Class="mb-4">Bulk Import</MudText>
+
+<MudGrid>
+    <MudItem xs="12" md="6">
+        <MudTextField @bind-Value="_rawInput" Label="Set numbers" Variant="Variant.Outlined"
+                      Lines="10" Placeholder="e.g. 75192, 10275&#10;10281&#10;75313-1"
+                      HelperText="Comma or newline separated. Bare numbers are treated as the -1 variant."
+                      Disabled="_isRunning" />
+        <MudFileUpload T="IBrowserFile" FilesChanged="OnFileSelected" Class="mt-2" Disabled="_isRunning">
+            <CustomContent>
+                <MudButton Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.UploadFile"
+                           OnClick="@(() => context.OpenFilePickerAsync())">
+                    Upload CSV
+                </MudButton>
+            </CustomContent>
+        </MudFileUpload>
+        <MudSelect T="BuildStatus" @bind-Value="_initialStatus" Label="Initial status for all sets" Class="mt-4" Disabled="_isRunning">
+            @foreach (var status in Enum.GetValues<BuildStatus>())
+            {
+                <MudSelectItem T="BuildStatus" Value="status">@status</MudSelectItem>
+            }
+        </MudSelect>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" Class="mt-4"
+                   OnClick="StartImport" Disabled="@(_isRunning || string.IsNullOrWhiteSpace(_rawInput))">
+            Start Import
+        </MudButton>
+    </MudItem>
+
+    <MudItem xs="12" md="6">
+        @if (_total > 0)
+        {
+            <MudText>@_processed / @_total processed</MudText>
+            <MudProgressLinear Color="Color.Primary" Value="@(_total == 0 ? 0 : 100.0 * _processed / _total)" Class="my-2" />
+        }
+        <MudPaper Class="pa-2" Style="max-height: 400px; overflow-y: auto;" Elevation="0" Outlined="true">
+            @foreach (var entry in _log.AsEnumerable().Reverse())
+            {
+                <MudText Color="@(entry.IsError ? Color.Error : Color.Success)" Typo="Typo.body2">
+                    @entry.TimestampUtc.ToLocalTime().ToString("T") — @entry.Message
+                </MudText>
+            }
+        </MudPaper>
+        @if (_total > 0 && _processed >= _total)
+        {
+            var failed = _log.Where(l => l.IsError).ToList();
+            <MudAlert Severity="@(failed.Count == 0 ? Severity.Success : Severity.Warning)" Class="mt-2">
+                Done: @(_total - failed.Count) succeeded, @failed.Count failed.
+            </MudAlert>
+        }
+    </MudItem>
+</MudGrid>
+
+@code {
+    private string _rawInput = "";
+    private BuildStatus _initialStatus = BuildStatus.InBox;
+    private bool _isRunning;
+    private Guid _batchId;
+    private int _total;
+    private int _processed;
+    private readonly List<ImportProgressEvent> _log = [];
+
+    private async Task OnFileSelected(IBrowserFile file)
+    {
+        using var stream = file.OpenReadStream(maxAllowedSize: 5 * 1024 * 1024);
+        using var reader = new StreamReader(stream);
+        _rawInput = await reader.ReadToEndAsync();
+    }
+
+    private async Task StartImport()
+    {
+        var setNumbers = _rawInput
+            .Split([',', '\n', '\r', ';'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Distinct()
+            .ToList();
+
+        if (setNumbers.Count == 0)
+        {
+            return;
+        }
+
+        _batchId = Guid.NewGuid();
+        _total = setNumbers.Count;
+        _processed = 0;
+        _log.Clear();
+        _isRunning = true;
+        Notifications.OnImportProgress += HandleProgress;
+
+        foreach (var setNum in setNumbers)
+        {
+            await ImportQueue.EnqueueAsync(new ImportJobItem(_batchId, setNum, _initialStatus, _total));
+        }
+    }
+
+    private void HandleProgress(ImportProgressEvent e)
+    {
+        if (e.BatchId != _batchId)
+        {
+            return;
+        }
+
+        InvokeAsync(() =>
+        {
+            _processed = e.Processed;
+            _log.Add(e);
+            if (_processed >= _total)
+            {
+                _isRunning = false;
+                Notifications.OnImportProgress -= HandleProgress;
+            }
+            StateHasChanged();
+        });
+    }
+
+    public void Dispose() => Notifications.OnImportProgress -= HandleProgress;
+}

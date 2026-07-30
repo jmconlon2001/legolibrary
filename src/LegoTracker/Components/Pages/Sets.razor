@@ -1,0 +1,75 @@
+@page "/sets"
+@using LegoTracker.Data
+@using LegoTracker.Data.Entities
+@using LegoTracker.Data.Enums
+@using LegoTracker.Components.Shared
+@using Microsoft.EntityFrameworkCore
+@inject LegoTrackerDbContext Db
+@inject IDialogService DialogService
+@inject NavigationManager Nav
+
+<PageTitle>Sets</PageTitle>
+
+<MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="mb-4">
+    <MudText Typo="Typo.h4">Sets</MudText>
+    <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add" OnClick="OpenAddSetDialog">
+        Add Set
+    </MudButton>
+</MudStack>
+
+@if (_sets is null)
+{
+    <MudProgressCircular Indeterminate="true" />
+}
+else
+{
+    <MudDataGrid Items="_sets" Filterable="true" SortMode="SortMode.Multiple" Groupable="false"
+                 RowClick="@((DataGridRowClickEventArgs<LegoSet> e) => Nav.NavigateTo($"/sets/{e.Item.Id}"))">
+        <Columns>
+            <TemplateColumn Title="Box Art" Sortable="false" Filterable="false">
+                <CellTemplate>
+                    @if (!string.IsNullOrEmpty(context.Item.BoxArtLocalPath))
+                    {
+                        <MudImage Src="@($"/media/{context.Item.BoxArtLocalPath}")" Width="48" Height="48" ObjectFit="ObjectFit.Contain" />
+                    }
+                </CellTemplate>
+            </TemplateColumn>
+            <PropertyColumn Property="x => x.SetNum" Title="Set #" />
+            <PropertyColumn Property="x => x.Name" />
+            <PropertyColumn Property="x => x.Theme!.Name" Title="Theme" Sortable="false" />
+            <PropertyColumn Property="x => x.Year" />
+            <PropertyColumn Property="x => x.PieceCount" Title="Pieces" />
+            <PropertyColumn Property="x => x.BuildStatus" Title="Status" />
+            <PropertyColumn Property="x => x.StorageLocation!.Name" Title="Storage Location" Sortable="false" />
+        </Columns>
+    </MudDataGrid>
+}
+
+@code {
+    private List<LegoSet>? _sets;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadSetsAsync();
+    }
+
+    private async Task LoadSetsAsync()
+    {
+        _sets = await Db.Sets
+            .Include(s => s.Theme)
+            .Include(s => s.StorageLocation)
+            .AsNoTracking()
+            .OrderBy(s => s.Name)
+            .ToListAsync();
+    }
+
+    private async Task OpenAddSetDialog()
+    {
+        var dialog = await DialogService.ShowAsync<AddSetDialog>("Add Set");
+        var result = await dialog.Result;
+        if (result is { Canceled: false })
+        {
+            await LoadSetsAsync();
+        }
+    }
+}

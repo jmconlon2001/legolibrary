@@ -1,0 +1,178 @@
+@page "/analytics"
+@using LegoTracker.Data
+@using LegoTracker.Data.Enums
+@using Microsoft.EntityFrameworkCore
+@inject LegoTrackerDbContext Db
+
+<PageTitle>Analytics</PageTitle>
+
+<MudText Typo="Typo.h4" Class="mb-4">Analytics</MudText>
+
+@if (_loading)
+{
+    <MudProgressCircular Indeterminate="true" />
+}
+else
+{
+    <MudGrid>
+        <MudItem xs="6" sm="3">
+            <MudPaper Class="pa-4" Outlined="true">
+                <MudText Typo="Typo.caption">Total Parts</MudText>
+                <MudText Typo="Typo.h4">@_totalParts.ToString("N0")</MudText>
+            </MudPaper>
+        </MudItem>
+        <MudItem xs="6" sm="3">
+            <MudPaper Class="pa-4" Outlined="true">
+                <MudText Typo="Typo.caption">Total Sets</MudText>
+                <MudText Typo="Typo.h4">@_totalSets.ToString("N0")</MudText>
+            </MudPaper>
+        </MudItem>
+        <MudItem xs="6" sm="3">
+            <MudPaper Class="pa-4" Outlined="true">
+                <MudText Typo="Typo.caption">Unique Part/Color Combos</MudText>
+                <MudText Typo="Typo.h4">@_uniqueCombos.ToString("N0")</MudText>
+                <MudText Typo="Typo.caption">@_duplicateCombos.ToString("N0") owned 2+</MudText>
+            </MudPaper>
+        </MudItem>
+        <MudItem xs="6" sm="3">
+            <MudPaper Class="pa-4" Outlined="true">
+                <MudText Typo="Typo.caption">Collection Value (est.)</MudText>
+                <MudText Typo="Typo.h4">@_collectionValuation.ToString("C0")</MudText>
+                <MudText Typo="Typo.caption">MSRP/manual estimate — not live pricing</MudText>
+            </MudPaper>
+        </MudItem>
+    </MudGrid>
+
+    <MudGrid Class="mt-4">
+        <MudItem xs="12" md="6">
+            <MudPaper Class="pa-4" Outlined="true">
+                <MudText Typo="Typo.h6" Class="mb-2">Sets by Build Status</MudText>
+                <MudChart ChartType="ChartType.Donut" ChartSeries="_setsByStatusSeries" ChartLabels="_statusLabels"
+                          ChartOptions="_statusChartOptions" Width="100%" Height="300px" />
+            </MudPaper>
+        </MudItem>
+        <MudItem xs="12" md="6">
+            <MudPaper Class="pa-4" Outlined="true">
+                <MudText Typo="Typo.h6" Class="mb-2">Parts Owned by Set Status</MudText>
+                <MudChart ChartType="ChartType.Donut" ChartSeries="_partsByStatusSeries" ChartLabels="_statusLabels"
+                          ChartOptions="_statusChartOptions" Width="100%" Height="300px" />
+            </MudPaper>
+        </MudItem>
+        <MudItem xs="12" md="6">
+            <MudPaper Class="pa-4" Outlined="true">
+                <MudText Typo="Typo.h6" Class="mb-2">Top Colors Owned</MudText>
+                <MudChart ChartType="ChartType.Donut" ChartSeries="_colorSeries" ChartLabels="_colorLabels"
+                          ChartOptions="_colorChartOptions" Width="100%" Height="300px" />
+            </MudPaper>
+        </MudItem>
+        <MudItem xs="12" md="6">
+            <MudPaper Class="pa-4" Outlined="true">
+                <MudText Typo="Typo.h6" Class="mb-2">Most Common Part Categories</MudText>
+                <MudChart ChartType="ChartType.Bar" ChartSeries="_categorySeries" ChartLabels="_categoryLabels"
+                          ChartOptions="_categoryChartOptions" Width="100%" Height="300px" />
+            </MudPaper>
+        </MudItem>
+    </MudGrid>
+}
+
+@code {
+    // Validated categorical palette (light-surface), fixed slot order — see the dataviz skill's
+    // references/palette.md. BuildStatus is always emitted in enum order (all 5 slots, even if a
+    // status has zero sets) so a given status keeps the same color across renders and charts.
+    private static readonly string[] CategoricalPalette =
+        ["#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4", "#008300", "#4a3aa7", "#e34948"];
+    private const string SequentialHue = "#2a78d6";
+    private const string OtherSliceColor = "#898781";
+    private static readonly string[] StatusOrder = Enum.GetNames<BuildStatus>();
+
+    private bool _loading = true;
+    private int _totalParts;
+    private int _totalSets;
+    private int _uniqueCombos;
+    private int _duplicateCombos;
+    private decimal _collectionValuation;
+
+    private string[] _statusLabels = [];
+    private List<ChartSeries<double>> _setsByStatusSeries = [];
+    private List<ChartSeries<double>> _partsByStatusSeries = [];
+    private ChartOptions _statusChartOptions = new() { ChartPalette = CategoricalPalette };
+
+    private string[] _colorLabels = [];
+    private List<ChartSeries<double>> _colorSeries = [];
+    private ChartOptions _colorChartOptions = new();
+
+    private string[] _categoryLabels = [];
+    private List<ChartSeries<double>> _categorySeries = [];
+    private ChartOptions _categoryChartOptions = new() { ChartPalette = [SequentialHue] };
+
+    protected override async Task OnInitializedAsync()
+    {
+        _totalParts = await Db.SetInventories.SumAsync(i => (int?)i.Quantity) ?? 0;
+        _totalSets = await Db.Sets.CountAsync();
+        _collectionValuation = await Db.Sets.SumAsync(s => (decimal?)(s.EstimatedValue ?? s.Msrp ?? 0)) ?? 0;
+
+        var comboTotals = await Db.SetInventories
+            .GroupBy(i => new { i.PartNum, i.ColorId })
+            .Select(g => g.Sum(i => i.Quantity))
+            .ToListAsync();
+        _uniqueCombos = comboTotals.Count(q => q == 1);
+        _duplicateCombos = comboTotals.Count(q => q > 1);
+
+        var setsByStatus = await Db.Sets
+            .GroupBy(s => s.BuildStatus)
+            .Select(g => new { Status = g.Key, Count = g.Count() })
+            .ToDictionaryAsync(x => x.Status, x => x.Count);
+        var partsByStatus = await Db.SetInventories
+            .GroupBy(i => i.LegoSet!.BuildStatus)
+            .Select(g => new { Status = g.Key, Quantity = g.Sum(i => i.Quantity) })
+            .ToDictionaryAsync(x => x.Status, x => x.Quantity);
+
+        _statusLabels = StatusOrder;
+        _setsByStatusSeries =
+        [
+            new ChartSeries<double>
+            {
+                Name = "Sets",
+                Data = StatusOrder.Select(s => (double)setsByStatus.GetValueOrDefault(Enum.Parse<BuildStatus>(s))).ToArray()
+            }
+        ];
+        _partsByStatusSeries =
+        [
+            new ChartSeries<double>
+            {
+                Name = "Parts",
+                Data = StatusOrder.Select(s => (double)partsByStatus.GetValueOrDefault(Enum.Parse<BuildStatus>(s))).ToArray()
+            }
+        ];
+
+        const int topN = 7;
+
+        var colorTotals = await Db.SetInventories
+            .GroupBy(i => new { i.ColorId, i.Color!.Name, i.Color.RgbHex })
+            .Select(g => new { g.Key.Name, g.Key.RgbHex, Quantity = g.Sum(i => i.Quantity) })
+            .OrderByDescending(x => x.Quantity)
+            .ToListAsync();
+        var topColors = colorTotals.Take(topN).ToList();
+        var otherColorQuantity = colorTotals.Skip(topN).Sum(x => x.Quantity);
+        var hasOtherColor = otherColorQuantity > 0;
+        _colorLabels = [.. topColors.Select(c => c.Name), .. (hasOtherColor ? ["Other"] : Array.Empty<string>())];
+        double[] colorValues = [.. topColors.Select(c => (double)c.Quantity), .. (hasOtherColor ? [(double)otherColorQuantity] : Array.Empty<double>())];
+        _colorSeries = [new ChartSeries<double> { Name = "Quantity", Data = colorValues }];
+        string[] colorPalette = [.. topColors.Select(c => string.IsNullOrEmpty(c.RgbHex) ? OtherSliceColor : $"#{c.RgbHex}"), .. (hasOtherColor ? [OtherSliceColor] : Array.Empty<string>())];
+        _colorChartOptions = new ChartOptions { ChartPalette = colorPalette };
+
+        var categoryTotals = await Db.SetInventories
+            .GroupBy(i => i.Part!.PartCategory!.Name)
+            .Select(g => new { CategoryName = g.Key, Quantity = g.Sum(i => i.Quantity) })
+            .OrderByDescending(x => x.Quantity)
+            .ToListAsync();
+        var topCategories = categoryTotals.Take(topN).ToList();
+        var otherCategoryQuantity = categoryTotals.Skip(topN).Sum(x => x.Quantity);
+        var hasOtherCategory = otherCategoryQuantity > 0;
+        _categoryLabels = [.. topCategories.Select(c => c.CategoryName), .. (hasOtherCategory ? ["Other"] : Array.Empty<string>())];
+        double[] categoryValues = [.. topCategories.Select(c => (double)c.Quantity), .. (hasOtherCategory ? [(double)otherCategoryQuantity] : Array.Empty<double>())];
+        _categorySeries = [new ChartSeries<double> { Name = "Quantity", Data = categoryValues }];
+
+        _loading = false;
+    }
+}

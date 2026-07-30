@@ -1,0 +1,82 @@
+@using LegoTracker.Data.Enums
+@using LegoTracker.Services.Import
+@using LegoTracker.Services.Notifications
+@implements IDisposable
+@inject ImportJobQueue ImportQueue
+@inject INotificationService Notifications
+
+<MudDialog>
+    <DialogContent>
+        <MudTextField @bind-Value="_setNum" Label="Set number" Placeholder="e.g. 75192 or 75192-1"
+                      Disabled="_isImporting" Immediate="true" />
+        <MudSelect T="BuildStatus" @bind-Value="_initialStatus" Label="Initial status" Class="mt-4" Disabled="_isImporting">
+            @foreach (var status in Enum.GetValues<BuildStatus>())
+            {
+                <MudSelectItem T="BuildStatus" Value="status">@status</MudSelectItem>
+            }
+        </MudSelect>
+        @if (_errorMessage is not null)
+        {
+            <MudAlert Severity="Severity.Error" Class="mt-4">@_errorMessage</MudAlert>
+        }
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel" Disabled="_isImporting">Cancel</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="Submit"
+                   Disabled="@(_isImporting || string.IsNullOrWhiteSpace(_setNum))">
+            @if (_isImporting)
+            {
+                <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+            }
+            Add
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = null!;
+
+    private string _setNum = "";
+    private BuildStatus _initialStatus = BuildStatus.InBox;
+    private bool _isImporting;
+    private string? _errorMessage;
+    private Guid _batchId;
+
+    private async Task Submit()
+    {
+        _isImporting = true;
+        _errorMessage = null;
+        _batchId = Guid.NewGuid();
+        Notifications.OnImportProgress += HandleProgress;
+
+        await ImportQueue.EnqueueAsync(new ImportJobItem(_batchId, _setNum.Trim(), _initialStatus, BatchTotal: 1));
+    }
+
+    private void HandleProgress(ImportProgressEvent e)
+    {
+        if (e.BatchId != _batchId)
+        {
+            return;
+        }
+
+        InvokeAsync(() =>
+        {
+            Notifications.OnImportProgress -= HandleProgress;
+            _isImporting = false;
+
+            if (e.IsError)
+            {
+                _errorMessage = e.Message;
+                StateHasChanged();
+            }
+            else
+            {
+                MudDialog.Close(DialogResult.Ok(true));
+            }
+        });
+    }
+
+    private void Cancel() => MudDialog.Cancel();
+
+    public void Dispose() => Notifications.OnImportProgress -= HandleProgress;
+}

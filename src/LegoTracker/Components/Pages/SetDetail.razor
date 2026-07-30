@@ -1,0 +1,115 @@
+@page "/sets/{Id:int}"
+@using LegoTracker.Data
+@using LegoTracker.Data.Entities
+@using LegoTracker.Data.Enums
+@using LegoTracker.Components.Shared
+@using Microsoft.EntityFrameworkCore
+@inject LegoTrackerDbContext Db
+@inject ISnackbar Snackbar
+
+<PageTitle>@(_set?.Name ?? "Set")</PageTitle>
+
+@if (_set is null)
+{
+    <MudProgressCircular Indeterminate="true" />
+}
+else
+{
+    <MudStack Row="true" Spacing="4">
+        @if (!string.IsNullOrEmpty(_set.BoxArtLocalPath))
+        {
+            <MudImage Src="@($"/media/{_set.BoxArtLocalPath}")" Width="200" ObjectFit="ObjectFit.Contain" />
+        }
+        <MudStack Class="flex-grow-1">
+            <MudText Typo="Typo.h4">@_set.Name</MudText>
+            <MudText Typo="Typo.subtitle1">@_set.SetNum · @_set.Theme?.Name · @_set.Year</MudText>
+            <MudText>@_set.PieceCount pieces</MudText>
+            <MudButton Href="@($"/sets/{Id}/instructions")" Variant="Variant.Outlined" Class="mt-2" Style="width: fit-content;">
+                Instructions
+            </MudButton>
+
+            <MudGrid Class="mt-4">
+                <MudItem xs="12" sm="6" md="3">
+                    <MudSelect T="BuildStatus" @bind-Value="_set.BuildStatus" Label="Build Status">
+                        @foreach (var status in Enum.GetValues<BuildStatus>())
+                        {
+                            <MudSelectItem T="BuildStatus" Value="status">@status</MudSelectItem>
+                        }
+                    </MudSelect>
+                </MudItem>
+                <MudItem xs="12" sm="6" md="3">
+                    <MudSelect T="int?" @bind-Value="_set.StorageLocationId" Label="Storage Location">
+                        <MudSelectItem T="int?" Value="null">—</MudSelectItem>
+                        @foreach (var location in _storageLocations)
+                        {
+                            <MudSelectItem T="int?" Value="location.Id">@location.Name</MudSelectItem>
+                        }
+                    </MudSelect>
+                </MudItem>
+                <MudItem xs="12" sm="6" md="3">
+                    <MudNumericField T="decimal?" @bind-Value="_set.Msrp" Label="MSRP (manual — not from Rebrickable)" Format="F2" />
+                </MudItem>
+                <MudItem xs="12" sm="6" md="3">
+                    <MudNumericField T="decimal?" @bind-Value="_set.EstimatedValue" Label="Estimated Value" Format="F2" />
+                </MudItem>
+            </MudGrid>
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="Save" Class="mt-2" Style="width: fit-content;">
+                Save
+            </MudButton>
+        </MudStack>
+    </MudStack>
+
+    <MudText Typo="Typo.h5" Class="mt-8 mb-2">Inventory (@_set.Inventory.Count(i => !i.IsSpare) parts, @_set.Inventory.Count(i => i.IsSpare) spares)</MudText>
+    <MudDataGrid Items="_set.Inventory" Filterable="true" SortMode="SortMode.Multiple">
+        <Columns>
+            <PropertyColumn Property="x => x.PartNum" Title="Part #" />
+            <PropertyColumn Property="x => x.Part!.Name" Title="Name" Sortable="false" />
+            <PropertyColumn Property="x => x.Color!.Name" Title="Color" />
+            <PropertyColumn Property="x => x.Quantity" />
+            <PropertyColumn Property="x => x.IsSpare" Title="Spare" />
+        </Columns>
+    </MudDataGrid>
+
+    <MudText Typo="Typo.h5" Class="mt-8 mb-2">Minifigs (@_set.Minifigs.Count)</MudText>
+    <MudDataGrid Items="_set.Minifigs" Filterable="true" SortMode="SortMode.Multiple">
+        <Columns>
+            <PropertyColumn Property="x => x.FigNum" Title="Fig #" />
+            <PropertyColumn Property="x => x.Minifig!.Name" Title="Name" Sortable="false" />
+            <PropertyColumn Property="x => x.Quantity" />
+        </Columns>
+    </MudDataGrid>
+
+    <MudText Typo="Typo.h5" Class="mt-8 mb-2">Missing / Damaged Parts</MudText>
+    <MissingPartTracker LegoSetId="Id" />
+}
+
+@code {
+    [Parameter] public int Id { get; set; }
+
+    private LegoSet? _set;
+    private List<StorageLocation> _storageLocations = [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        _storageLocations = await Db.StorageLocations.OrderBy(l => l.Name).ToListAsync();
+        _set = await Db.Sets
+            .Include(s => s.Theme)
+            .Include(s => s.StorageLocation)
+            .Include(s => s.Inventory).ThenInclude(i => i.Part)
+            .Include(s => s.Inventory).ThenInclude(i => i.Color)
+            .Include(s => s.Minifigs).ThenInclude(m => m.Minifig)
+            .FirstOrDefaultAsync(s => s.Id == Id);
+    }
+
+    private async Task Save()
+    {
+        if (_set is null)
+        {
+            return;
+        }
+
+        _set.UpdatedAtUtc = DateTime.UtcNow;
+        await Db.SaveChangesAsync();
+        Snackbar.Add("Saved", Severity.Success);
+    }
+}

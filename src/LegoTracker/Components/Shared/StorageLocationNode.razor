@@ -1,0 +1,18 @@
+@using LegoTracker.Data.Entities
+
+<MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Style="@($"padding-left: {Depth * 24}px")">
+    <MudText>@Location.Name @(string.IsNullOrEmpty(Location.Notes) ? "" : $"— {Location.Notes}")</MudText>
+    <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" OnClick="@(() => OnDelete.InvokeAsync(Location))" />
+</MudStack>
+
+@foreach (var child in AllLocations.Where(l => l.ParentLocationId == Location.Id).OrderBy(l => l.Name))
+{
+    <StorageLocationNode Location="child" AllLocations="AllLocations" Depth="Depth + 1" OnDelete="OnDelete" />
+}
+
+@code {
+    [Parameter, EditorRequired] public StorageLocation Location { get; set; } = null!;
+    [Parameter, EditorRequired] public List<StorageLocation> AllLocations { get; set; } = [];
+    [Parameter] public int Depth { get; set; }
+    [Parameter] public EventCallback<StorageLocation> OnDelete { get; set; }
+}

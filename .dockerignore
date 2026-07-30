@@ -1,0 +1,10 @@
+**/bin/
+**/obj/
+**/data/
+**/media/
+tests/
+.git/
+.claude/
+*.db
+*.db-shm
+*.db-wal

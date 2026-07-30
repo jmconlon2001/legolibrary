@@ -1,0 +1,14 @@
+services:
+  legotracker:
+    build: .
+    image: ghcr.io/your-github-username/legolibrary:latest
+    ports:
+      - "8080:8080"
+    environment:
+      - Rebrickable__ApiKey=${REBRICKABLE_API_KEY}
+      - ConnectionStrings__Default=Data Source=/app/data/legotracker.db
+      - Media__RootPath=/app/media
+    volumes:
+      - ./data:/app/data
+      - ./media:/app/media
+    restart: unless-stopped

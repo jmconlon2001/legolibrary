@@ -1,0 +1,55 @@
+@page "/"
+
+<PageTitle>LEGO Set Tracker</PageTitle>
+
+<MudText Typo="Typo.h4" GutterBottom="true">LEGO Set Tracker &amp; Analytics</MudText>
+<MudText Typo="Typo.body1" Class="mb-4">
+    Track your LEGO collection: build status, brick inventory, instructions, and analytics.
+</MudText>
+
+<MudGrid>
+    <MudItem xs="12" sm="6" md="3">
+        <MudCard>
+            <MudCardContent>
+                <MudText Typo="Typo.h6">Sets</MudText>
+                <MudText Typo="Typo.body2">Browse and manage your collection.</MudText>
+            </MudCardContent>
+            <MudCardActions>
+                <MudButton Variant="Variant.Text" Color="Color.Primary" Href="sets">Open</MudButton>
+            </MudCardActions>
+        </MudCard>
+    </MudItem>
+    <MudItem xs="12" sm="6" md="3">
+        <MudCard>
+            <MudCardContent>
+                <MudText Typo="Typo.h6">Bulk Import</MudText>
+                <MudText Typo="Typo.body2">Import many sets at once with live progress.</MudText>
+            </MudCardContent>
+            <MudCardActions>
+                <MudButton Variant="Variant.Text" Color="Color.Primary" Href="import">Open</MudButton>
+            </MudCardActions>
+        </MudCard>
+    </MudItem>
+    <MudItem xs="12" sm="6" md="3">
+        <MudCard>
+            <MudCardContent>
+                <MudText Typo="Typo.h6">Analytics</MudText>
+                <MudText Typo="Typo.body2">Parts, colors, and collection value.</MudText>
+            </MudCardContent>
+            <MudCardActions>
+                <MudButton Variant="Variant.Text" Color="Color.Primary" Href="analytics">Open</MudButton>
+            </MudCardActions>
+        </MudCard>
+    </MudItem>
+    <MudItem xs="12" sm="6" md="3">
+        <MudCard>
+            <MudCardContent>
+                <MudText Typo="Typo.h6">Storage Locations</MudText>
+                <MudText Typo="Typo.body2">Organize sets into bins, shelves, and rooms.</MudText>
+            </MudCardContent>
+            <MudCardActions>
+                <MudButton Variant="Variant.Text" Color="Color.Primary" Href="storage-locations">Open</MudButton>
+            </MudCardActions>
+        </MudCard>
+    </MudItem>
+</MudGrid>
